@@ -1,0 +1,16 @@
+{% for alert in alerts -%}
+    {%  if alert.status == 'firing' %}
+    <strong><font color="#ff0000">FIRING</font></strong>
+    {% elif alert.status == 'resolved' %}
+    <strong><font color="#33cc33">RESOLVED</font></strong>
+    {% else %}
+    <strong>{{ alert.status }}</strong>
+    {% endif %}
+    {% if alert.labels.name %} 
+        {{ alert.labels["name"] }} 
+    {% elif alert.labels.alertname %}
+        {{ alert.labels.alertname }}
+    {% endif %} >>
+    {% if alert.annotations.summary %} {{ alert.annotations.summary }} {% endif %}
+    {% if alert.generatorURL %} {{ alert.generatorURL }} {% endif %} 
+{%- endfor %}

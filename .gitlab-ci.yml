@@ -1,0 +1,25 @@
+include:
+  - project: 'famedly/company/devops/templates/ci-cd'
+    ref: 'rust-v1'
+    file: '/rust.yml'
+  - project: 'famedly/company/devops/templates/ci-cd'
+    ref: 'docker-v1'
+    file: '/docker.yml'
+
+stages:
+  - test
+  - build
+  - upload
+  
+cargo-check:
+  extends: .cargo_check
+  script:
+    - rustup default nightly
+    - rustup component add clippy --toolchain nightly
+    - !reference [.cargo_check, script]
+
+cargo-build:
+  extends: .cargo_build
+  script:
+    - rustup default nightly
+    - !reference [.cargo_build, script]

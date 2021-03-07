@@ -1,0 +1,39 @@
+# used by bots to post the alert endpoint url into the room
+url_api_prefix: "https://howler.famedly.com/api/v1"
+# time in seconds to wait for other bots to confirm message before alert will be resent
+message_timeout: 5.0
+# time to wait for other alerts to be batched together
+batch_interval: 3.0
+bots:
+  # howler bots
+  # first bot is the main bot
+  # next bots are backup bots
+  - login:
+      user_id: "@howler:homeserver1.xyz"
+      homeserver: "https://homeserver1.xyz"
+      password: "correcthorsebatterystaple"
+  - login:
+      user_id: "@howler:homeserver2.xyz"
+      homeserver: "https://homeserver2.xyz"
+      password: "correcthorsebatterystaple"
+  - login:
+      user_id: "@howler:homeserver3.xyz"
+      homeserver: "https://homeserver3.xyz"
+      password: "correcthorsebatterystaple"
+default_templates:
+  # absolute paths of default templates
+  plain: /templates/default.plain
+  html: /templates/default.html
+alert_webhook_receiver:
+  # path should be routed to / by a http reverse proxy
+  # used by matrix bot for posting the target url
+  bind_address: "::"
+  port: 8080
+# prometheus telemetry endpoint
+telemetry_endpoint:
+  bind_address: "::"
+  port: 6464
+# absolute folder path for persistent data
+store_path: ~/.store/
+log: 
+  level: Info
