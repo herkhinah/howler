@@ -1,15 +1,18 @@
 include:
   - project: 'famedly/company/devops/templates/ci-cd'
-    ref: 'rust-v1'
-    file: '/rust.yml'
+    ref: rust-v1
+    file:
+      - '/rust.yml'
   - project: 'famedly/company/devops/templates/ci-cd'
-    ref: 'docker-v1'
-    file: '/docker.yml'
+    ref: docker-v1
+    file:
+      - '/docker.yml'
 
 stages:
   - test
   - build
-  - upload
+#  - upload
+  - deploy
   
 cargo-check:
   extends: .cargo_check
@@ -23,3 +26,16 @@ cargo-build:
   script:
     - rustup default nightly
     - !reference [.cargo_build, script]
+    - mv config.sample.yaml ./target/release/config.yaml
+  artifacts:
+    paths:
+      - target/release/
+
+docker-releases:
+  extends: .docker_releases
+
+docker-tags:
+  extends: .docker_tags
+
+docker-branches:
+  extends: .docker_branches
