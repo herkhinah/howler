@@ -1,36 +1,42 @@
-//! per room access tokens for the alertmanager webhook receiver
+//! per room access tokens for the alertmanager webhook receiver (set via
+//! com.famedly.howler_webhook_access_token state event)
 use std::sync::Arc;
 
 use hashbrown::HashMap;
 use matrix_sdk::{locks::RwLock, ruma::identifiers::RoomId};
 use once_cell::sync::OnceCell;
 
+/// map to get the token set for a room
 static ROOM_TOKENS: OnceCell<RwLock<RoomTokenMap>> = OnceCell::new();
 
-/// the access token for each room
+/// the access token set via the state event
+/// com.famedly.howler_webhook_access_token for each room
 #[derive(Debug)]
 pub struct RoomTokenMap {
-    room_to_token: HashMap<Arc<RoomId>, String>,
+	/// maps room ids to tokens (set in the room via
+	/// com.famedly.howler_webhook_access_token)
+	room_to_token: HashMap<Arc<RoomId>, String>,
 }
 
 impl RoomTokenMap {
-    fn new() -> Self {
-        Self {
-            room_to_token: HashMap::new(),
-        }
-    }
+	/// Constructs an empty map
+	fn new() -> Self {
+		Self { room_to_token: HashMap::new() }
+	}
 
-    pub fn global() -> &'static RwLock<Self> {
-        ROOM_TOKENS.get_or_init(|| RwLock::new(Self::new()))
-    }
+	/// Get a reference to the map (only one instance is used in the whole
+	/// program)
+	pub fn global() -> &'static RwLock<Self> {
+		ROOM_TOKENS.get_or_init(|| RwLock::new(Self::new()))
+	}
 
-    /// register access token for a room
-    pub fn register_token(&mut self, room_id: Arc<RoomId>, token: String) {
-        self.room_to_token.insert(room_id, token);
-    }
+	/// register access token for a room
+	pub fn register_token(&mut self, room_id: Arc<RoomId>, token: String) {
+		self.room_to_token.insert(room_id, token);
+	}
 
-    /// get access token for a room
-    pub fn get_token(&self, room_id: &Arc<RoomId>) -> Option<&String> {
-        self.room_to_token.get(room_id)
-    }
+	/// get access token for a room
+	pub fn get_token(&self, room_id: &Arc<RoomId>) -> Option<&String> {
+		self.room_to_token.get(room_id)
+	}
 }
