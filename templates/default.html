@@ -6,11 +6,11 @@
     {% else %}
     <strong>{{ alert.status }}</strong>
     {% endif %}
-    {% if alert.labels.name %} 
-        {{ alert.labels["name"] }} 
+    {% if alert.labels.name %}
+        {{ alert.labels["name"] }}
     {% elif alert.labels.alertname %}
         {{ alert.labels.alertname }}
     {% endif %} >>
     {% if alert.annotations.summary %} {{ alert.annotations.summary }} {% endif %}
-    {% if alert.generatorURL %} {{ alert.generatorURL }} {% endif %} 
+    {% if alert.generatorURL %} {{ alert.generatorURL }} {% endif %}
 {%- endfor %}

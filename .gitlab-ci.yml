@@ -10,7 +10,7 @@ stages:
   - test
   - build
   - upload
-  
+
 cargo-check:
   extends: .cargo_check
   script:

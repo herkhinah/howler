@@ -4,10 +4,10 @@
 //! [alertmanager_webhook_receiver](crate::alertmanager_webhook_receiver)
 //! Rendered alerts are sent to [matrix::queuing][crate::matrix::queuing]
 
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
 use anyhow::{Context, Result};
-use matrix_sdk::ruma::{identifiers::RoomId, EventId};
+use matrix_sdk::ruma::{OwnedEventId, OwnedRoomId};
 use serde::Deserialize;
 use tera::Tera;
 use tokio::{sync::mpsc, time::Instant};
@@ -25,9 +25,9 @@ pub enum AlertRendererChannelMessage {
 	/// register a template for a specified room
 	RegisterTemplate {
 		/// room to register the templates for
-		room_id: Box<RoomId>,
+		room_id: OwnedRoomId,
 		/// event id of the `com.famedly.howler_template` state event
-		event_id: Box<EventId>,
+		event_id: OwnedEventId,
 		/// html jinja2 template
 		html: String,
 		/// plaintext jinja2 template
@@ -36,7 +36,7 @@ pub enum AlertRendererChannelMessage {
 	/// render an alert for room_id
 	RenderAlert {
 		/// room to send the rendered alert to
-		room_id: Arc<RoomId>,
+		room_id: OwnedRoomId,
 		/// alert data to render
 		alert: Box<alert::Data>,
 		/// instant the alert was received
@@ -50,7 +50,7 @@ pub struct AlertRenderer {
 	tera: Tera,
 	/// event ids of `com.famedly.howler_template` state event so we don't
 	/// register the same template multiple times
-	template_requests: HashSet<Box<EventId>>,
+	template_requests: HashSet<OwnedEventId>,
 	/// channel used to receive messages from bots and the webhook receiver
 	tx_queue: mpsc::Sender<QueueChannelMessage>,
 }
@@ -108,7 +108,7 @@ impl AlertRenderer {
 	/// * `arrival` - time of arrival of the alert
 	pub async fn render_alert(
 		&self,
-		room_id: Arc<RoomId>,
+		room_id: OwnedRoomId,
 		alert: Box<alert::Data>,
 		arrival: Instant,
 	) {
@@ -195,8 +195,8 @@ impl AlertRenderer {
 	/// * `plain` - plain template to register
 	pub async fn register_template(
 		&mut self,
-		event_id: Box<EventId>,
-		room_id: Box<RoomId>,
+		event_id: OwnedEventId,
+		room_id: OwnedRoomId,
 		html: String,
 		plain: String,
 	) {
@@ -205,20 +205,17 @@ impl AlertRenderer {
 			return;
 		}
 
-		let room = Arc::from(room_id);
-
-		if let Err(err) = self.tera.add_raw_template(&format!("{room}.plain"), &plain) {
+		if let Err(err) = self.tera.add_raw_template(&format!("{room_id}.plain"), &plain) {
 			// failed to register plaintext template, send error message to the queue
 			let html = format!("<strong><font color=\"#ff0000\">failed to register plaintext template:</font></strong>\n<br>\n<code>{}</code>", tera::escape_html(&format!("{err:#?}")));
 			let plain = format!("failed to register plaintext template:\n{err:#?}");
-			let room = Arc::clone(&room);
 
 			match RenderedAlertContent::new(html, plain) {
 				Ok(content) | Err(MessageContentError::MaxSizeExceeded(content)) => {
 					#[allow(clippy::expect_used)]
 					self.tx_queue
 						.send(QueueChannelMessage::QueueEntry {
-							room,
+							room: room_id.clone(),
 							entry: RenderedAlert::new(Instant::now(), content),
 						})
 						.await
@@ -227,11 +224,11 @@ impl AlertRenderer {
 			}
 		}
 
-		if let Err(err) = self.tera.add_raw_template(&format!("{room}.html"), &html) {
+		if let Err(err) = self.tera.add_raw_template(&format!("{room_id}.html"), &html) {
 			// failed to register html template, send error message to the queue
 			let html = format!("<strong><font color=\"#ff0000\">failed to register html template:</font></strong>\n<br>\n<code>{}</code>", tera::escape_html(&format!("{err:#?}")));
 			let plain = format!("failed to register html template:\n{err:#?}");
-			let room = room.clone();
+			let room = room_id.clone();
 
 			match RenderedAlertContent::new(html, plain) {
 				Ok(content) | Err(MessageContentError::MaxSizeExceeded(content)) => {

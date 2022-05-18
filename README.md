@@ -7,6 +7,8 @@ Features:
 - batches alerts for the same target room which arrive in short succession into a single message
 - backup bots
 - checks if messages federate to at least one other servers
+- forwards different webhook url paths into different matrix room
+- per room configurable jinja2 templates for rendering alerts(configured via state events)
 
 ## Usage
 

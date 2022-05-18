@@ -4,12 +4,7 @@ use std::{convert::TryFrom, time::Duration};
 
 use anyhow::{Context, Result};
 use matrix_sdk::{
-	async_trait,
-	bytes::Bytes,
-	config::RequestConfig,
-	reqwest,
-	ruma::{api::exports::http, UserId},
-	HttpError, HttpSend,
+	async_trait, bytes::Bytes, config::RequestConfig, reqwest, ruma::UserId, HttpError, HttpSend,
 };
 use prometheus::{HistogramVec, IntCounterVec};
 

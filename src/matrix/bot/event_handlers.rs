@@ -1,7 +1,5 @@
 //! event handlers for the matrix-sdk client
 
-use std::sync::Arc;
-
 use matrix_sdk::{
 	event_handler::Ctx,
 	room::Room,
@@ -13,7 +11,7 @@ use matrix_sdk::{
 			},
 			SyncStateEvent,
 		},
-		UserId,
+		OwnedUserId,
 	},
 	Client,
 };
@@ -33,16 +31,16 @@ use crate::{
 /// of a message.
 pub async fn handle_sync_room_message_event(
 	ev: SyncRoomMessageEvent,
-	Ctx(user_id): Ctx<Arc<UserId>>,
+	Ctx(user_id): Ctx<OwnedUserId>,
 	Ctx(tx_queue): Ctx<mpsc::Sender<QueueChannelMessage>>,
 ) {
-	if ev.sender == *user_id {
+	if ev.sender() == user_id {
 		return;
 	}
 
 	#[allow(clippy::expect_used)]
 	tx_queue
-		.send(QueueChannelMessage::ConfirmFederation(ev.event_id))
+		.send(QueueChannelMessage::ConfirmFederation(ev.event_id().to_owned()))
 		.await
 		.expect("channel tx_queue closed");
 }
@@ -53,7 +51,7 @@ pub async fn handle_stripped_room_member_event(
 	ev: StrippedRoomMemberEvent,
 	room: Room,
 	client: Client,
-	Ctx(user_id): Ctx<Arc<UserId>>,
+	Ctx(user_id): Ctx<OwnedUserId>,
 	Ctx(allow_list): Ctx<&AllowList>,
 ) {
 	if ev.state_key != user_id.as_str() {
@@ -77,16 +75,18 @@ pub async fn handle_template_state_event(
 	room: Room,
 	Ctx(tx_renderer): Ctx<mpsc::Sender<AlertRendererChannelMessage>>,
 ) {
-	let plain = ev.content.plain;
-	let html = ev.content.html;
+	if let SyncStateEvent::Original(ev) = ev {
+		let plain = ev.content.plain;
+		let html = ev.content.html;
 
-	let room_id = room.room_id().to_owned();
-	let event_id = ev.event_id;
-	#[allow(clippy::expect_used)]
-	tx_renderer
-		.send(AlertRendererChannelMessage::RegisterTemplate { room_id, event_id, plain, html })
-		.await
-		.expect("channel tx_renderer closed");
+		let room_id = room.room_id().to_owned();
+		let event_id = ev.event_id;
+		#[allow(clippy::expect_used)]
+		tx_renderer
+			.send(AlertRendererChannelMessage::RegisterTemplate { room_id, event_id, plain, html })
+			.await
+			.expect("channel tx_renderer closed");
+	}
 }
 
 /// An `com.famedly.howler.webhook_access_token` state event was set.
@@ -94,8 +94,10 @@ pub async fn handle_webhook_access_token_state_event(
 	ev: SyncStateEvent<WebhookAccessTokenEventContent>,
 	room: Room,
 ) {
-	RoomTokenMap::global()
-		.write()
-		.await
-		.register_token(Arc::from(room.room_id().to_owned()), ev.content.token);
+	if let SyncStateEvent::Original(ev) = ev {
+		RoomTokenMap::global()
+			.write()
+			.await
+			.register_token(room.room_id().to_owned(), ev.content.token);
+	}
 }

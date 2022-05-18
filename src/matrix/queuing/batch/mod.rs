@@ -1,12 +1,12 @@
 //! Here we define the data structure that is responsible for queuing and
 //! batching incoming alerts and requeuing alerts that couldn't be sent or
 //! failed to federate.
-use std::{cmp::Reverse, collections::BinaryHeap, pin::Pin, sync::Arc, task::Poll, time::Duration};
+use std::{cmp::Reverse, collections::BinaryHeap, pin::Pin, task::Poll, time::Duration};
 
 use futures::Stream;
 use hashbrown::{hash_map::Entry, HashMap};
 use indexmap::IndexMap;
-use matrix_sdk::ruma::RoomId;
+use matrix_sdk::ruma::OwnedRoomId;
 use tokio::{pin, time::Instant};
 use tokio_util::time::{delay_queue, DelayQueue};
 
@@ -45,14 +45,14 @@ struct WaitingRoomEntries {
 pub struct BatchQueue {
 	/// alerts waiting one batch interval beginning from the arrival of the
 	/// oldest entry for each room before getting moved into [Self::ready]
-	waiting: HashMap<Arc<RoomId>, WaitingRoomEntries>,
+	waiting: HashMap<OwnedRoomId, WaitingRoomEntries>,
 
 	/// alerts ready to send
-	ready: IndexMap<Arc<RoomId>, BinaryHeap<Reverse<RenderedAlert>>>,
+	ready: IndexMap<OwnedRoomId, BinaryHeap<Reverse<RenderedAlert>>>,
 
 	/// This notifies us if a [Self::waiting] entry has finished it's batch
 	/// interval
-	timeout_queue: DelayQueue<Arc<RoomId>>,
+	timeout_queue: DelayQueue<OwnedRoomId>,
 
 	/// the interval between from
 	/// [RenderedAlertMetadata::arrival](crate::rendered_alert::
@@ -85,7 +85,7 @@ impl BatchQueue {
 	/// * `room_id` - the target room of the rendered alert
 	///
 	/// * `entry` - the renderer alert to queue
-	pub fn queue(&mut self, room_id: Arc<RoomId>, mut entry: RenderedAlert) {
+	pub fn queue(&mut self, room_id: OwnedRoomId, mut entry: RenderedAlert) {
 		// if we already have alerts ready for sending for the specified target room
 		// don't wait for the batch timeout
 		if let Some(entries) = self.ready.get_mut(&room_id) {
@@ -127,7 +127,7 @@ impl BatchQueue {
 	/// * `room_id` - the target room
 	///
 	/// * `entries` - the alerts to requeue
-	pub fn requeue(&mut self, room_id: Arc<RoomId>, entries: Vec<Reverse<RenderedAlert>>) {
+	pub fn requeue(&mut self, room_id: OwnedRoomId, entries: Vec<Reverse<RenderedAlert>>) {
 		if let Some(heap) = self.ready.get_mut(&room_id) {
 			heap.extend(entries.into_iter());
 		} else {

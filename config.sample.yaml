@@ -40,5 +40,5 @@ alert_webhook_receiver:
 telemetry_endpoint:
   bind_address: "::"
   port: 1312
-log: 
+log:
   level: Warn

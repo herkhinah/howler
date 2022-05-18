@@ -2,7 +2,9 @@
 //! as a fallback if the rendered alert or an error message is too large to send
 //! as a single message.
 
-use matrix_sdk::ruma::events::{room::message::RoomMessageEventContent, AnyMessageEventContent};
+use matrix_sdk::ruma::events::{
+	room::message::RoomMessageEventContent, AnyMessageLikeEventContent,
+};
 use thiserror::Error;
 use tokio::time::Instant;
 
@@ -123,14 +125,16 @@ impl RenderedAlertContent {
 	}
 }
 
-impl From<RenderedAlertContent> for AnyMessageEventContent {
+impl From<RenderedAlertContent> for AnyMessageLikeEventContent {
 	fn from(msg: RenderedAlertContent) -> Self {
-		AnyMessageEventContent::RoomMessage(RoomMessageEventContent::text_html(msg.plain, msg.html))
+		AnyMessageLikeEventContent::RoomMessage(RoomMessageEventContent::text_html(
+			msg.plain, msg.html,
+		))
 	}
 }
-impl From<&RenderedAlertContent> for AnyMessageEventContent {
-	fn from(msg: &RenderedAlertContent) -> AnyMessageEventContent {
-		AnyMessageEventContent::RoomMessage(RoomMessageEventContent::text_html(
+impl From<&RenderedAlertContent> for AnyMessageLikeEventContent {
+	fn from(msg: &RenderedAlertContent) -> AnyMessageLikeEventContent {
+		AnyMessageLikeEventContent::RoomMessage(RoomMessageEventContent::text_html(
 			msg.plain.clone(),
 			msg.html.clone(),
 		))

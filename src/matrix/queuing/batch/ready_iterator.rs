@@ -1,9 +1,9 @@
 //! Here we define the data structure that is responsible for queuing and
 //! batching incoming alerts and requeuing alerts that couldn't be sent or
 //! failed to federate.
-use std::{cmp::Reverse, collections::BinaryHeap, sync::Arc};
+use std::{cmp::Reverse, collections::BinaryHeap};
 
-use matrix_sdk::ruma::RoomId;
+use matrix_sdk::ruma::OwnedRoomId;
 use rand::prelude::*;
 use tokio::time::Instant;
 
@@ -43,7 +43,7 @@ impl<'a> ReadyIterator<'a> {
 	/// from the returned [ReadyAlerts] struct there was no bot available that
 	/// could send a message to that room so the alerts won't be returned in a
 	/// future next call of this iterator
-	pub fn next(&mut self) -> Option<(&mut Arc<RoomId>, ReadyAlerts<'_>)> {
+	pub fn next(&mut self) -> Option<(&mut OwnedRoomId, ReadyAlerts<'_>)> {
 		let next = match self.last_viewed {
 			Some(last) => last.next(self.queue),
 			None => LastViewed::first(self.queue),

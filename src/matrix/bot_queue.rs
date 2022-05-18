@@ -1,13 +1,10 @@
 //! Here we define the data structure for queuing bots in idle mode. Backup bots
 //! get queued to the end of the queue after becoming idle, the main bot get's
 //! queued to the front when becoming idle.
-use std::{
-	collections::{linked_list::CursorMut, LinkedList},
-	sync::Arc,
-};
+use std::collections::{linked_list::CursorMut, LinkedList};
 
 use hashbrown::HashMap;
-use matrix_sdk::ruma::UserId;
+use matrix_sdk::ruma::{OwnedUserId, UserId};
 use tokio::sync::mpsc;
 
 use super::bot::{Bot, BotChannelMessage};
@@ -17,7 +14,7 @@ use super::bot::{Bot, BotChannelMessage};
 #[derive(Debug)]
 pub struct BotQueueEntry {
 	/// the user id of the bot
-	pub user_id: Arc<UserId>,
+	pub user_id: OwnedUserId,
 	/// the channel to communicate witht the bot
 	pub channel: mpsc::Sender<BotChannelMessage>,
 	/// true if it's a backup bot
@@ -41,7 +38,7 @@ pub struct BotQueue {
 	/// the main bot is inserted to the front
 	idle: LinkedList<BotQueueEntry>,
 	/// map of busy bots
-	busy: HashMap<Arc<UserId>, BotQueueEntry>,
+	busy: HashMap<OwnedUserId, BotQueueEntry>,
 }
 
 impl BotQueue {
@@ -63,7 +60,7 @@ impl BotQueue {
 
 	/// queues an idle bot, backup bots get queued to the end the main bot to
 	/// the front
-	pub fn queue(&mut self, user_id: &Arc<UserId>) {
+	pub fn queue(&mut self, user_id: &UserId) {
 		if let Some(entry) = self.busy.remove(user_id) {
 			if entry.backup {
 				self.idle.push_back(entry);
@@ -84,7 +81,7 @@ impl BotQueue {
 #[derive(Debug)]
 pub struct Cursor<'a> {
 	/// mutable reference to the map of busy bots
-	busy: &'a mut HashMap<Arc<UserId>, BotQueueEntry>,
+	busy: &'a mut HashMap<OwnedUserId, BotQueueEntry>,
 	/// cursor over the idle bots
 	idle: CursorMut<'a, BotQueueEntry>,
 }

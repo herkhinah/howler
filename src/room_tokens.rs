@@ -1,9 +1,11 @@
 //! per room access tokens for the alertmanager webhook receiver (set via
 //! com.famedly.howler_webhook_access_token state event)
-use std::sync::Arc;
 
 use hashbrown::HashMap;
-use matrix_sdk::{locks::RwLock, ruma::identifiers::RoomId};
+use matrix_sdk::{
+	locks::RwLock,
+	ruma::{OwnedRoomId, RoomId},
+};
 use once_cell::sync::OnceCell;
 
 /// map to get the token set for a room
@@ -15,7 +17,7 @@ static ROOM_TOKENS: OnceCell<RwLock<RoomTokenMap>> = OnceCell::new();
 pub struct RoomTokenMap {
 	/// maps room ids to tokens (set in the room via
 	/// com.famedly.howler_webhook_access_token)
-	room_to_token: HashMap<Arc<RoomId>, String>,
+	room_to_token: HashMap<OwnedRoomId, String>,
 }
 
 impl RoomTokenMap {
@@ -31,12 +33,12 @@ impl RoomTokenMap {
 	}
 
 	/// register access token for a room
-	pub fn register_token(&mut self, room_id: Arc<RoomId>, token: String) {
+	pub fn register_token(&mut self, room_id: OwnedRoomId, token: String) {
 		self.room_to_token.insert(room_id, token);
 	}
 
 	/// get access token for a room
-	pub fn get_token(&self, room_id: &Arc<RoomId>) -> Option<&String> {
+	pub fn get_token(&self, room_id: &RoomId) -> Option<&String> {
 		self.room_to_token.get(room_id)
 	}
 }

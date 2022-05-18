@@ -11,13 +11,13 @@ pub mod backoffs;
 pub mod batch;
 mod federation_timeout;
 
-use std::{cmp::Reverse, sync::Arc, time::Duration};
+use std::{cmp::Reverse, time::Duration};
 
 use anyhow::{Context, Result};
 use federation_timeout::FederationTimeoutQueue;
 pub use federation_timeout::UnconfirmedMessage;
 use futures::StreamExt;
-use matrix_sdk::ruma::{EventId, RoomId, UserId};
+use matrix_sdk::ruma::{OwnedEventId, OwnedRoomId, OwnedUserId};
 use tokio::{sync::mpsc, time::Instant};
 
 use self::{
@@ -40,13 +40,13 @@ pub enum QueueChannelMessage {
 	/// alert for us to queue
 	QueueEntry {
 		/// target room
-		room: Arc<RoomId>,
+		room: OwnedRoomId,
 		/// rendered alert
 		entry: RenderedAlert,
 	},
 	/// a [bot][crate::matrix::bot::Bot] has confirmed that a message not sent
 	/// by themself has arrived
-	ConfirmFederation(Box<EventId>),
+	ConfirmFederation(OwnedEventId),
 }
 
 /// enum for the bot to notify us that sending a message has failed and what we
@@ -57,9 +57,9 @@ pub enum SendError {
 	/// we must put the bot into backoff
 	Backoff {
 		/// target room for message
-		room: Arc<RoomId>,
+		room: OwnedRoomId,
 		/// bot that tried sending the message
-		bot: Arc<UserId>,
+		bot: OwnedUserId,
 		/// the rendered alerts that where batched into the message
 		entries: Vec<Reverse<RenderedAlert>>,
 		/// instant in time from when the backoff should applied
@@ -69,9 +69,9 @@ pub enum SendError {
 	/// value we must put the bot into ratelimit
 	Ratelimit {
 		/// target room for message
-		room: Arc<RoomId>,
+		room: OwnedRoomId,
 		/// bot that tried sending the message
-		bot: Arc<UserId>,
+		bot: OwnedUserId,
 		/// the rendered alerts that where batched into the message
 		entries: Vec<Reverse<RenderedAlert>>,
 		/// instant from when to ratelimit the bot
@@ -202,7 +202,7 @@ pub fn run(
 /// notifies a bot via `tx_bot` to send the message into `room`
 async fn dispatch(
 	tx_bot: mpsc::Sender<BotChannelMessage>,
-	room: Arc<RoomId>,
+	room: OwnedRoomId,
 	mut entries: ReadyAlerts<'_>,
 ) {
 	// the batched message

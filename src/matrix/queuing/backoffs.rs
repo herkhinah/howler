@@ -3,7 +3,6 @@
 
 use std::{
 	collections::{HashMap, HashSet},
-	sync::Arc,
 	task::Poll,
 	time::Duration,
 };
@@ -11,7 +10,7 @@ use std::{
 use anyhow::{Context, Result};
 use backoff::{backoff::Backoff, ExponentialBackoff, ExponentialBackoffBuilder};
 use futures::Stream;
-use matrix_sdk::ruma::{RoomId, UserId};
+use matrix_sdk::ruma::{OwnedRoomId, OwnedUserId, RoomId, UserId};
 use prometheus::HistogramVec;
 use serde::Deserialize;
 use serde_with::{serde_as, DurationSeconds};
@@ -73,21 +72,21 @@ impl BackoffMetrics {
 	}
 
 	/// record (non federation) backoff time
-	pub fn record_backoff(&self, bot: &Arc<UserId>, room: &Arc<RoomId>, duration: Duration) {
+	pub fn record_backoff(&self, bot: &UserId, room: &RoomId, duration: Duration) {
 		self.backoff
 			.with_label_values(&[room.as_str(), bot.as_str()])
 			.observe(duration.as_secs_f64());
 	}
 
 	/// record ratelimit time
-	pub fn record_ratelimit(&self, bot: &Arc<UserId>, room: &Arc<RoomId>, duration: Duration) {
+	pub fn record_ratelimit(&self, bot: &UserId, room: &RoomId, duration: Duration) {
 		self.ratelimit
 			.with_label_values(&[room.as_str(), bot.as_str()])
 			.observe(duration.as_secs_f64());
 	}
 
 	/// record federation backoff time
-	pub fn record_federation_backoff(&self, bot: &Arc<UserId>, duration: Duration) {
+	pub fn record_federation_backoff(&self, bot: &UserId, duration: Duration) {
 		self.federation_backoff.with_label_values(&[bot.as_str()]).observe(duration.as_secs_f64());
 	}
 }
@@ -103,17 +102,17 @@ pub struct Backoffs {
 	federation_backoff_settings: FederationBackoffSettings,
 
 	/// per room backoff
-	backoff: PairMap<Arc<UserId>, Arc<RoomId>, ExponentialBackoff>,
+	backoff: PairMap<OwnedUserId, OwnedRoomId, ExponentialBackoff>,
 
 	/// backoff if
-	federation_backoff: HashMap<Arc<UserId>, ExponentialBackoff>,
+	federation_backoff: HashMap<OwnedUserId, ExponentialBackoff>,
 
 	/// HashSet of active backoff intervals
-	in_backoff: PairSet<Arc<UserId>, Arc<RoomId>>,
+	in_backoff: PairSet<OwnedUserId, OwnedRoomId>,
 	/// HashSet of active federation backoff intervals
-	in_federation_backoff: HashSet<Arc<UserId>>,
+	in_federation_backoff: HashSet<OwnedUserId>,
 	/// HashSet of bots who are currently ratelimited for a specific room
-	in_ratelimit: PairSet<Arc<UserId>, Arc<RoomId>>,
+	in_ratelimit: PairSet<OwnedUserId, OwnedRoomId>,
 
 	/// this notifies us if a backoff or ratelimit interval is coming to it's
 	/// end
@@ -137,7 +136,7 @@ impl Backoffs {
 	}
 
 	/// backoff `bot` after a message failed to send to `room`
-	pub fn backoff(&mut self, bot: Arc<UserId>, room: Arc<RoomId>, from: Instant) {
+	pub fn backoff(&mut self, bot: OwnedUserId, room: OwnedRoomId, from: Instant) {
 		let backoff_duration = if let Some(backoff) = self.backoff.get_mut(&bot, &room) {
 			#[allow(clippy::expect_used)]
 			backoff.next_backoff().expect("ExponentialBackoff configured with infinite backoffs")
@@ -164,7 +163,7 @@ impl Backoffs {
 
 	/// stop backoff of `bot` for `room` after a message was successfully sent
 	/// (but not necesarrily confirmed by other bots)
-	pub fn stop_backoff(&mut self, bot: &Arc<UserId>, room: &Arc<RoomId>) {
+	pub fn stop_backoff(&mut self, bot: &UserId, room: &RoomId) {
 		self.backoff.remove(bot, room);
 	}
 
@@ -172,8 +171,8 @@ impl Backoffs {
 	/// `M_LIMIT_EXCEEDED` and also specified a timeout
 	pub fn ratelimit(
 		&mut self,
-		bot: Arc<UserId>,
-		room: Arc<RoomId>,
+		bot: OwnedUserId,
+		room: OwnedRoomId,
 		from: Instant,
 		duration: Duration,
 	) {
@@ -184,7 +183,7 @@ impl Backoffs {
 	}
 
 	/// put `bot` into federation backoff after a message failed to confirm
-	pub fn federation_backoff(&mut self, bot: Arc<UserId>, from: Instant) {
+	pub fn federation_backoff(&mut self, bot: OwnedUserId, from: Instant) {
 		if self.in_federation_backoff.contains(&bot) {
 			return;
 		}
@@ -214,7 +213,7 @@ impl Backoffs {
 	}
 
 	/// stop federation backoff for `bot` after message was confirmed in time
-	pub fn stop_federation_backoff(&mut self, bot: &Arc<UserId>) {
+	pub fn stop_federation_backoff(&mut self, bot: &UserId) {
 		if !self.in_federation_backoff.contains(bot) {
 			self.federation_backoff.remove(bot);
 		}
@@ -222,7 +221,7 @@ impl Backoffs {
 
 	/// check if `bot` can send messages to `room` or is blocked by a backoff or
 	/// ratelimit
-	pub fn is_ready(&self, bot: &Arc<UserId>, room: &Arc<RoomId>) -> bool {
+	pub fn is_ready(&self, bot: &UserId, room: &RoomId) -> bool {
 		if self.in_federation_backoff.contains(bot) {
 			return false;
 		}
@@ -245,21 +244,21 @@ enum Timeout {
 	/// federation backoff interval for `bot` elapsed
 	FederationBackoff {
 		/// bot who's federation backoff interval elapsed
-		bot: Arc<UserId>,
+		bot: OwnedUserId,
 	},
 	/// backoff interval for `bot` in `room` elapsed
 	Backoff {
 		/// bot who's room backoff elapsed
-		bot: Arc<UserId>,
+		bot: OwnedUserId,
 		/// the specific room the bot was in backoff
-		room: Arc<RoomId>,
+		room: OwnedRoomId,
 	},
 	/// ratelimit interval for `bot` in `room` elapsed
 	Ratelimit {
 		/// bot who was ratelimited in `room`
-		bot: Arc<UserId>,
+		bot: OwnedUserId,
 		/// the specific room the bot was ratelimited in
-		room: Arc<RoomId>,
+		room: OwnedRoomId,
 	},
 }
 

@@ -5,23 +5,19 @@ use std::{cmp::Reverse, sync::Arc};
 use anyhow::{Context, Result};
 use backoff::{backoff::Backoff, ExponentialBackoff};
 use matrix_sdk::{
-	config::{ClientConfig, RequestConfig, SyncSettings},
+	config::{RequestConfig, SyncSettings},
 	room::{Invited, Room},
 	ruma::{
 		api::{
-			client::{
-				error::{Error as ApiError, ErrorKind::LimitExceeded},
-				r0::message::send_message_event::Response,
-			},
+			client::{error::ErrorKind::LimitExceeded, message::send_message_event::v3::Response},
 			error::{FromHttpResponseError, ServerError},
 		},
-		events::AnyMessageEventContent,
-		identifiers::RoomId,
-		UserId,
+		events::AnyMessageLikeEventContent,
+		OwnedRoomId, OwnedUserId,
 	},
 	Client,
 	Error::Http,
-	HttpError,
+	HttpError, RumaApiError,
 };
 use tokio::{sync::mpsc, time::Instant};
 
@@ -56,9 +52,9 @@ pub enum BotChannelMessage {
 		/// the entries that where batched together into a single message
 		entries: Vec<Reverse<RenderedAlert>>,
 		/// the batched message to send
-		content: AnyMessageEventContent,
+		content: AnyMessageLikeEventContent,
 		/// the target room
-		room: Arc<RoomId>,
+		room: OwnedRoomId,
 	},
 }
 
@@ -84,7 +80,7 @@ pub struct Bot {
 	tx_queue: mpsc::Sender<QueueChannelMessage>,
 
 	/// the user id of the bot
-	bot_id: Arc<UserId>,
+	bot_id: OwnedUserId,
 
 	/// is the bot a backup bot
 	is_backup: bool,
@@ -100,29 +96,28 @@ impl Bot {
 	) -> Result<Self> {
 		let (tx, rx) = mpsc::channel(64);
 
-		let client_config = ClientConfig::new()
-			.passphrase(settings.password.clone())
+		let client = Client::builder()
+			.homeserver_url(&settings.homeserver)
 			.request_config(RequestConfig::new().disable_retry())
-			.client(Arc::new(
+			.http_client(Arc::new(
 				http_client::Client::new(&settings.user_id)
 					.context("failed to construct http client")?,
-			));
-
-		let client = Client::new_with_config(settings.homeserver.clone(), client_config)
+			))
+			.build()
 			.await
-			.context("failed to create client")?;
+			.context("failed to construct client")?;
 
 		client
 			.login(settings.user_id.localpart(), &settings.password, None, None)
 			.await
 			.context("failed to login homeserver")?;
 
-		let bot_id = Arc::from(client.user_id().await.context("could not get UserId from Client")?);
+		let bot_id = client.user_id().await.context("could not get UserId from Client")?;
 
 		tracing::info!("bot {bot_id} logged in");
 
 		client
-			.register_event_handler_context(Arc::clone(&bot_id))
+			.register_event_handler_context(bot_id.clone())
 			.register_event_handler_context(tx_queue.clone())
 			.register_event_handler_context(tx_renderer.clone())
 			.register_event_handler_context(&Settings::global().allow_invites)
@@ -151,7 +146,7 @@ impl Bot {
 	}
 
 	/// get user id of bot
-	pub fn bot_id(&self) -> Arc<UserId> {
+	pub fn bot_id(&self) -> OwnedUserId {
 		self.bot_id.clone()
 	}
 
@@ -192,8 +187,8 @@ impl Bot {
 	/// send message
 	async fn send(
 		&mut self,
-		room_id: Arc<RoomId>,
-		message: AnyMessageEventContent,
+		room_id: OwnedRoomId,
+		message: AnyMessageLikeEventContent,
 		entries: Vec<Reverse<RenderedAlert>>,
 	) -> Result<UnconfirmedMessage, SendError> {
 		let room = match self.client.get_room(&room_id) {
@@ -223,22 +218,23 @@ impl Bot {
 				batch_entries: entries,
 			}),
 			// message failed to send but we got a deserializable error message from the server
-			Err(Http(HttpError::ClientApi(FromHttpResponseError::Http(ServerError::Known(
-				err,
+			Err(Http(HttpError::Api(FromHttpResponseError::Server(ServerError::Known(
+				RumaApiError::ClientApi(err),
 			))))) => {
 				self.metrics.record_message_send_error(&room_id, Some(&err));
 				// check if server returned M_LIMIT_EXCEEDED (ratelimit)
 				match err {
 					// we've got ratelimited
-					ApiError { kind: LimitExceeded { retry_after_ms: Some(duration) }, .. } => {
-						Err(SendError::Ratelimit {
-							room: room_id,
-							bot: self.bot_id(),
-							entries,
-							from: Instant::now(),
-							duration,
-						})
-					}
+					matrix_sdk::ruma::api::client::Error {
+						kind: LimitExceeded { retry_after_ms: Some(duration) },
+						..
+					} => Err(SendError::Ratelimit {
+						room: room_id,
+						bot: self.bot_id(),
+						entries,
+						from: Instant::now(),
+						duration,
+					}),
 					// some other error occured
 					_ => Err(SendError::Backoff {
 						room: room_id,
@@ -269,8 +265,11 @@ fn reject_invitation(room: Invited) {
 		let mut backoff = ExponentialBackoff::default();
 
 		while let Err(err) = room.reject_invitation().await {
-			if let Http(HttpError::ClientApi(FromHttpResponseError::Http(ServerError::Known(
-				ApiError { kind: LimitExceeded { retry_after_ms: Some(duration) }, .. },
+			if let Http(HttpError::Api(FromHttpResponseError::Server(ServerError::Known(
+				RumaApiError::ClientApi(matrix_sdk::ruma::api::client::Error {
+					kind: LimitExceeded { retry_after_ms: Some(duration) },
+					..
+				}),
 			)))) = err
 			{
 				tokio::time::sleep(duration).await;
@@ -284,7 +283,7 @@ fn reject_invitation(room: Invited) {
 }
 
 /// try to join room repeatedly via backoff
-fn join_room(client: Client, user_id: Arc<UserId>, room: Room) {
+fn join_room(client: Client, user_id: OwnedUserId, room: Room) {
 	tokio::spawn(async move {
 		let mut backoff = ExponentialBackoff::default();
 
@@ -294,8 +293,11 @@ fn join_room(client: Client, user_id: Arc<UserId>, room: Room) {
 				room.room_id()
 			);
 
-			if let HttpError::ClientApi(FromHttpResponseError::Http(ServerError::Known(
-				ApiError { kind: LimitExceeded { retry_after_ms: Some(duration) }, .. },
+			if let HttpError::Api(FromHttpResponseError::Server(ServerError::Known(
+				RumaApiError::ClientApi(matrix_sdk::ruma::api::client::Error {
+					kind: LimitExceeded { retry_after_ms: Some(duration) },
+					..
+				}),
 			))) = err
 			{
 				tokio::time::sleep(duration).await;

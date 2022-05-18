@@ -6,12 +6,12 @@
 //! [Backoffs::federation_backoff][super::backoffs::Backoffs::
 //! federation_backoff]. This is done in the main event loop [super::run].
 
-use std::{cmp::Reverse, pin::Pin, sync::Arc, task::Poll, time::Duration};
+use std::{cmp::Reverse, pin::Pin, task::Poll, time::Duration};
 
 use anyhow::{Context, Result};
 use futures::Stream;
 use hashbrown::{hash_map::Entry, HashMap};
-use matrix_sdk::ruma::{EventId, RoomId, UserId};
+use matrix_sdk::ruma::{OwnedEventId, OwnedRoomId, OwnedUserId, RoomId};
 use prometheus::{HistogramVec, IntCounterVec};
 use tokio::time::Instant;
 use tokio_util::time::{delay_queue, DelayQueue};
@@ -115,11 +115,11 @@ impl Metrics {
 /// sent alerts waiting for federation confirmation
 pub struct UnconfirmedMessage {
 	/// [EventId] of sent message
-	pub event_id: Box<EventId>,
+	pub event_id: OwnedEventId,
 	/// bot which sent the message
-	pub bot_id: Arc<UserId>,
+	pub bot_id: OwnedUserId,
 	/// target room of message
-	pub target_room: Arc<RoomId>,
+	pub target_room: OwnedRoomId,
 	/// rendered alerts which get requeued if federation isn't confirmed in time
 	pub batch_entries: Vec<Reverse<RenderedAlert>>,
 }
@@ -140,7 +140,7 @@ pub struct FederationTimeoutQueue {
 	/// a map from the event id of a message to the number of times a message
 	/// still needs to be confirmed and the key used by the `DelayQueue` so we
 	/// can remove the timeout after a message has been confirmed by enough bots
-	event_ids: HashMap<Box<EventId>, (u64, delay_queue::Key)>,
+	event_ids: HashMap<OwnedEventId, (u64, delay_queue::Key)>,
 	/// the duration during which a sent message can be confirmed before it's
 	/// corresponding alerts are being requeued
 	confirmation_timeout: Duration,
@@ -181,7 +181,7 @@ impl FederationTimeoutQueue {
 	///
 	/// * `event_id` - EventId of the message to confirm. The caller must make
 	///   sure, the EventId was sent by another bot
-	pub fn confirm_message(&mut self, event_id: Box<EventId>) -> Option<Arc<UserId>> {
+	pub fn confirm_message(&mut self, event_id: OwnedEventId) -> Option<OwnedUserId> {
 		if let Entry::Occupied(mut o) = self.event_ids.entry(event_id) {
 			let (required_confirmations, _) = o.get_mut();
 
@@ -207,7 +207,7 @@ impl FederationTimeoutQueue {
 /// This Stream gives us the messages that have been waiting for federation
 /// confirmation but have timed out
 impl Stream for FederationTimeoutQueue {
-	type Item = (Arc<RoomId>, Arc<UserId>, Vec<Reverse<RenderedAlert>>);
+	type Item = (OwnedRoomId, OwnedUserId, Vec<Reverse<RenderedAlert>>);
 
 	fn poll_next(
 		mut self: Pin<&mut Self>,

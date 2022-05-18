@@ -13,7 +13,7 @@ use axum::{
 	routing::post,
 	Router,
 };
-use matrix_sdk::{locks::RwLock, ruma::RoomId};
+use matrix_sdk::{locks::RwLock, ruma::OwnedRoomId};
 use prometheus::IntCounterVec;
 use serde::Deserialize;
 use tokio::{sync::mpsc, time::Instant};
@@ -80,7 +80,7 @@ async fn prometheus_receiver(
 	Extension(state): Extension<Arc<State>>,
 ) -> StatusCode {
 	let State { token_map, tx_renderer, received_alerts_meter: metric } = &*state;
-	let room_id = match RoomId::parse_arc(room_id) {
+	let room_id = match OwnedRoomId::try_from(room_id.as_str()) {
 		Ok(room_id) => room_id,
 		Err(_) => {
 			metric.with_label_values(&["invalid_room_id"]).inc();
