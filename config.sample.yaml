@@ -1,0 +1,44 @@
+allow_invites:
+  - '@foo:bar.xyz'
+  - 'famedly.de'
+
+federation:
+  # time in seconds in which other bots have to confirm the message
+  timeout: 3.0
+  # how many bots have to confirm federation
+  required_confirmations: 1
+  backoff:
+    starting_interval: 3.0
+    max_interval: 30
+    multiplier: 1.5
+
+# time in seconds to wait for other alerts to be batched together
+batch_interval: 1.5
+bots:
+  # howler bots
+  # first bot is the main bot
+  # next bots are backup bots
+  # for federation confirmation to properly work, all bots have to be hosted on a different server
+  - user_id: "@howler:homeserver1.xyz"
+    homeserver: "https://homeserver1.xyz"
+    password: "correcthorsebatterystaple"
+  - user_id: "@howler:homeserver2.xyz"
+    homeserver: "https://homeserver2.xyz"
+    password: "correcthorsebatterystaple"
+  - user_id: "@howler:homeserver3.xyz"
+    homeserver: "https://homeserver3.xyz"
+    password: "correcthorsebatterystaple"
+default_templates:
+  # absolute paths of default templates
+  plain: /templates/default.plain
+  html: /templates/default.html
+alert_webhook_receiver:
+  # path of webhook urls is /room_id/access_token
+  bind_address: "::"
+  port: 69
+# prometheus telemetry endpoint
+telemetry_endpoint:
+  bind_address: "::"
+  port: 1312
+log:
+  level: Warn

@@ -1,0 +1,3 @@
+{% for alert in alerts -%}{%  if alert.status == 'firing' %}FIRING{% elif alert.status == 'resolved' %}RESOLVED{% else %}{{ alert.status }}{% endif %}
+{% if alert.labels.name %}{{ alert.labels.name }}{% elif alert.labels.alertname %}{{ alert.labels.alertname }}{% endif %} >> {% if alert.annotations.summary %}{{ alert.annotations.summary }}{% endif %}
+{% if alert.generatorURL %}{{ alert.generatorURL }}{% endif %}{%- endfor %}
